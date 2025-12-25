@@ -18,7 +18,7 @@ class NetworkManager:
     def load_nodes(self):
         file_path = os.path.join(self.data_folder, 'BSM307_317_Guz2025_TermProject_NodeData.csv')
         
-        # Hata denetimi olmadan dosyayı açıyoruz
+        # Dosya açımı
         with open(file_path, 'r', encoding='utf-8') as file:
             next(file) # Başlığı atla
             
@@ -137,4 +137,5 @@ class NetworkManager:
         except nx.NetworkXNoPath:
             return [] # Yol yoksa boş liste dön
             
+
         return paths
