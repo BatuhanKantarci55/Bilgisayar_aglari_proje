@@ -3,12 +3,15 @@ import numpy as np
 import os
 
 class NetworkManager:
-    def __init__(self):
+    def __init__(self, weights=(0.33, 0.33, 0.34)):
         self.data_folder = 'data'
         
         # NetworkX kütüphanesini kullanarak boş bir graf oluşturuyoruz
         self.G = nx.Graph()
-        self.demands = [] 
+        self.demands = []
+        
+        # Optimizasyon ağırlıkları (görsel uygulama için)
+        self.weights = weights
         
         # Fonksiyonları çalıştır
         self.load_nodes()
@@ -78,7 +81,12 @@ class NetworkManager:
     def calculate_fitness(self, path, weights=(0.33, 0.33, 0.34)):
         # Yol boşsa veya geçersizse sonsuz ceza
         if not path or len(path) < 2:
-            return float('inf')
+            return {
+                "fitness": float('inf'),
+                "total_delay": float('inf'),
+                "total_reliability": 0.0,
+                "resource_cost": float('inf')
+            }
             
         w_delay, w_rel, w_res = weights
         
@@ -103,7 +111,12 @@ class NetworkManager:
             
             # Bağlantı var mı kontrolü
             if not self.G.has_edge(source_node, destination_node):
-                return float('inf')
+                return {
+                    "fitness": float('inf'),
+                    "total_delay": float('inf'),
+                    "total_reliability": 0.0,
+                    "resource_cost": float('inf')
+                }
                 
             # self.G[u][v] ile kenar verisine ulaşırız
             edge_data = self.G[source_node][destination_node]
@@ -119,8 +132,81 @@ class NetworkManager:
         fitness = (w_delay * total_delay) + \
                   (w_rel * total_rel_cost) + \
                   (w_res * total_res_cost)
-                  
-        return fitness
+        
+        # Detaylı rapor döndür (PDF Madde 5 için gerekli)
+        return {
+            "fitness": fitness,
+            "total_delay": total_delay,
+            "total_reliability": np.exp(-total_rel_cost),  # Logaritmayı geri çevirip % ol
+            "resource_cost": total_res_cost
+        }
+    
+    def calculate_metrics(self, path):
+        """
+        Görsel uygulama için metrikleri hesaplar.
+        self.weights kullanır (dışarıdan weights parametresi almaz).
+        """
+        # Yol boşsa veya geçersizse sonsuz ceza
+        if not path or len(path) < 2:
+            return {
+                "fitness": float('inf'),
+                "total_delay": float('inf'),
+                "total_reliability": 0.0,
+                "resource_cost": float('inf')
+            }
+            
+        w_delay, w_rel, w_res = self.weights
+        
+        total_delay = 0
+        total_rel_cost = 0
+        total_res_cost = 0
+        
+        # 1. Düğüm Hesapları (NetworkX verisinden)
+        for node_id in path[1:-1]:
+            # self.G.nodes[id] ile verilere ulaşırız
+            node_data = self.G.nodes[node_id]
+            total_delay += node_data.get('processing_delay', 0)
+            
+            rel = node_data.get('reliability', 0.99)
+            # NumPy logaritma fonksiyonu
+            total_rel_cost += -np.log(rel) if rel > 0 else 100
+
+        # 2. Bağlantı Hesapları
+        for i in range(len(path) - 1):
+            source_node = path[i]
+            destination_node = path[i+1]
+            
+            # Bağlantı var mı kontrolü
+            if not self.G.has_edge(source_node, destination_node):
+                return {
+                    "fitness": float('inf'),
+                    "total_delay": float('inf'),
+                    "total_reliability": 0.0,
+                    "resource_cost": float('inf')
+                }
+                
+            # self.G[u][v] ile kenar verisine ulaşırız
+            edge_data = self.G[source_node][destination_node]
+            
+            total_delay += edge_data.get('link_delay', 0)
+            
+            link_rel = edge_data.get('reliability', 0.99)
+            total_rel_cost += -np.log(link_rel) if link_rel > 0 else 100
+            
+            bw = edge_data.get('bandwidth', 1)
+            total_res_cost += (1000.0 / bw) if bw > 0 else 100
+
+        fitness = (w_delay * total_delay) + \
+                  (w_rel * total_rel_cost) + \
+                  (w_res * total_res_cost)
+        
+        # Detaylı rapor döndür (PDF Madde 5 için gerekli)
+        return {
+            "fitness": fitness,
+            "total_delay": total_delay,
+            "total_reliability": np.exp(-total_rel_cost),  # Logaritmayı geri çevirip % ol
+            "resource_cost": total_res_cost
+        }
 
     def find_initial_paths(self, start, end, limit=5):
         # NetworkX'in güçlü "shortest_simple_paths" fonksiyonunu kullanıyoruz.
